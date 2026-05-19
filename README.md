@@ -4,7 +4,7 @@ AI agent for GitLab — two features, one repo:
 
 | Feature | How it works |
 |---|---|
-| **Issue creation** | MCP server exposed to Claude Desktop / claude.ai → you ask Claude to create an issue → it calls GitLab API |
+| **Issue management** | MCP server exposed to Claude Desktop / claude.ai → create, list, read, and comment on issues via GitLab API |
 | **Issue analysis** | GitLab webhook → FastAPI handler → agentic loop browses the codebase → posts an analysis comment on the issue |
 
 Both features share the same GitLab client, LLM abstraction, and config.
@@ -36,7 +36,23 @@ LLM_API_BASE=http://localhost:8000/v1
 
 ```bash
 cp .env.example .env
-# Renseigner GITLAB_TOKEN, GITLAB_WEBHOOK_SECRET, LLM_MODEL
+# Renseigner GITLAB_TOKEN, LLM_MODEL, et l'une des deux options d'auth webhook ci-dessous
+```
+
+**Authentification webhook — choisir une méthode :**
+
+| Variable | Méthode | Recommandé |
+|---|---|---|
+| `GITLAB_WEBHOOK_SIGNING_SECRET` | HMAC-SHA256 ([Standard Webhooks](https://www.standardwebhooks.com/)) | ✅ |
+| `GITLAB_WEBHOOK_SECRET` | Comparaison de token plain-text (`X-Gitlab-Token`) | Legacy |
+
+Si les deux sont définis, le signing secret a la priorité. Si aucun n'est défini, la vérification est désactivée (dev uniquement).
+
+**Paramètres optionnels de l'agent :**
+
+```env
+AGENT_MAX_ITERATIONS=10      # nombre maximum d'appels d'outils par analyse
+AGENT_MAX_FILE_SIZE_KB=100   # ignore les fichiers plus grands que cette limite
 ```
 
 ### 2. Dev (Docker, hot reload, tunnel public inclus)
@@ -56,7 +72,7 @@ Trois conteneurs démarrent :
 
 Copier l'URL du tunnel dans GitLab → Project → Settings → Webhooks :
 - URL : `https://xxxx.trycloudflare.com/webhook`
-- Secret token : valeur de `GITLAB_WEBHOOK_SECRET`
+- Secret token : valeur de `GITLAB_WEBHOOK_SECRET` (ou laisser vide si tu utilises `GITLAB_WEBHOOK_SIGNING_SECRET`)
 - Trigger : ✅ Issues events
 
 > Le tunnel Cloudflare est éphémère (l'URL change à chaque redémarrage) et ne
@@ -66,6 +82,8 @@ Copier l'URL du tunnel dans GitLab → Project → Settings → Webhooks :
 ### 3. MCP server — connexion à Claude Desktop
 
 Claude Desktop est disponible sur Linux, macOS et Windows.
+
+Outils exposés : `create_issue`, `list_issues`, `get_issue`, `add_issue_comment`.
 
 Ajouter dans `~/.config/Claude/claude_desktop_config.json` (Linux) :
 ```json
@@ -84,7 +102,7 @@ Ajouter dans `~/.config/Claude/claude_desktop_config.json` (Linux) :
 }
 ```
 
-Ou si tu préfères le lancer directement sans Docker :
+Ou sans Docker :
 ```bash
 pip install -e ".[dev]"
 python -m mcp_server.main
@@ -108,10 +126,9 @@ gitlab-ai-agent/
 │   ├── llm.py             # LiteLLM abstraction
 │   └── agent.py           # agentic tool-calling loop
 ├── mcp_server/
-│   └── main.py            # MCP server (issue creation tools)
+│   └── main.py            # MCP server (create_issue, list_issues, get_issue, add_issue_comment)
 ├── webhook_handler/
-│   └── main.py            # FastAPI webhook receiver
-├── tests/
+│   └── main.py            # FastAPI webhook receiver + signature verification
 ├── Dockerfile             # multi-stage (webhook-handler / mcp-server)
 ├── docker-compose.yml
 └── pyproject.toml
