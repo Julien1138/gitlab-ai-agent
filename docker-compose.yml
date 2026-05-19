@@ -1,0 +1,73 @@
+services:
+
+  # -------------------------------------------------------------------------
+  # DEV — un seul conteneur, source montée en volume, hot reload activé
+  # Lance avec : docker compose --profile dev up
+  # -------------------------------------------------------------------------
+
+  webhook-handler-dev:
+    profiles: [dev]
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app          # hot reload : les modifs locales sont reflétées immédiatement
+    env_file: .env
+    ports:
+      - "8000:8000"
+    command: >
+      python -m uvicorn webhook_handler.main:app
+      --host 0.0.0.0 --port 8000 --reload
+    networks: [agent-net]
+
+  # Tunnel Cloudflare → expose localhost:8000 à GitLab sans compte requis
+  # L'URL publique temporaire s'affiche dans les logs au démarrage.
+  tunnel-dev:
+    profiles: [dev]
+    build:
+      context: .
+      target: dev
+    env_file: .env
+    command: cloudflared tunnel --no-autoupdate --url http://webhook-handler-dev:8000
+    depends_on: [webhook-handler-dev]
+    networks: [agent-net]
+
+  mcp-server-dev:
+    profiles: [dev]
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+    env_file: .env
+    command: python -m mcp_server.main
+    networks: [agent-net]
+
+  # -------------------------------------------------------------------------
+  # PROD — images buildées, pas de volume, restart automatique
+  # Lance avec : docker compose --profile prod up -d
+  # -------------------------------------------------------------------------
+
+  webhook-handler:
+    profiles: [prod]
+    build:
+      context: .
+      target: webhook-handler
+    env_file: .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks: [agent-net]
+
+  mcp-server:
+    profiles: [prod]
+    build:
+      context: .
+      target: mcp-server
+    env_file: .env
+    restart: unless-stopped
+    networks: [agent-net]
+
+networks:
+  agent-net:
+
