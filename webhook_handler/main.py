@@ -128,13 +128,19 @@ async def webhook(
 
     log.info("webhook_received", gitlab_event=event)
 
-    # We only care about new issues for now
+    # We only care about new issues labelled "bug"
     if event == "Issue Hook" and payload.get("object_attributes", {}).get("action") == "open":
         attrs = payload["object_attributes"]
+        labels = [lbl.get("title", "") for lbl in attrs.get("labels", [])]
+
+        if "bug" not in labels:
+            log.info("issue_skipped_no_bug_label", labels=labels)
+            return {"status": "ignored", "reason": "no 'bug' label"}
+
         project_id = payload["project"]["id"]
         issue_iid = attrs["iid"]
 
-        log.info("new_issue_detected", project_id=project_id, issue_iid=issue_iid)
+        log.info("new_bug_issue_detected", project_id=project_id, issue_iid=issue_iid)
         background_tasks.add_task(_handle_issue_event, project_id, issue_iid)
         return {"status": "accepted", "issue_iid": issue_iid}
 
