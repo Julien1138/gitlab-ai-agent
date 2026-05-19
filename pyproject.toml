@@ -34,6 +34,9 @@ dev = [
     "mypy>=1.10.0",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["common", "mcp_server", "webhook_handler"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
